@@ -1,5 +1,7 @@
 "use strict";
 
+const API_URL = "http://localhost:8000";
+
 let canvas = null;
 let ctx = null;
 let animationFrameId = null;
@@ -14,7 +16,6 @@ const mouse = { x: -1000, y: -1000, targetX: -1000, targetY: -1000 };
 const simParams = {
     speed: 6,
     density: 160,
-    type: "wing",
     viewMode: "particles",
 };
 
@@ -24,6 +25,17 @@ const flowObject = {
     radius: 55,
     isDragging: false,
 };
+
+const loadedModel = {
+    image: null,
+    width: 0,
+    height: 0,
+    src: null,
+    file: null,
+};
+
+let serverFields = null;
+let isRequesting = false;
 
 const prefersReducedMotion = window.matchMedia(
     "(prefers-reduced-motion: reduce)",
@@ -43,13 +55,26 @@ document.addEventListener("DOMContentLoaded", () => {
         generateParticles(simParams.density);
         drawStaticScene();
         initObjectInteraction();
+        initModelUpload();
     }
 
     initBackgroundWind();
     initScrollReveal();
     initEventDelegation();
     initSubscribeForm();
+    checkBackend();
 });
+
+async function checkBackend() {
+    try {
+        const res = await fetch(`${API_URL}/health`);
+        if (!res.ok) return;
+        const data = await res.json();
+        console.info(`AeroFlow backend: ${data.status}, device=${data.device}`);
+    } catch {
+        console.warn(`AeroFlow backend недоступен: ${API_URL}`);
+    }
+}
 
 function initEventDelegation() {
     document.addEventListener("click", (e) => {
@@ -59,12 +84,7 @@ function initEventDelegation() {
             if (action === "scroll-to-sim") scrollToSim();
             if (action === "start") runSimulation();
             if (action === "reset") resetSimulation();
-            return;
-        }
-
-        const typeBtn = e.target.closest("[data-object-type]");
-        if (typeBtn) {
-            setObjectType(typeBtn.dataset.objectType);
+            if (action === "clear-model") clearModel();
             return;
         }
 
@@ -76,8 +96,16 @@ function initEventDelegation() {
 
     const speedInput = document.getElementById("inputSpeed");
     const densityInput = document.getElementById("inputDensity");
+
     speedInput?.addEventListener("input", updateParams);
     densityInput?.addEventListener("input", updateParams);
+
+    speedInput?.addEventListener("change", () => {
+        if (loadedModel.file) requestSimulation(loadedModel.file);
+    });
+    densityInput?.addEventListener("change", () => {
+        if (loadedModel.file) requestSimulation(loadedModel.file);
+    });
 }
 
 function initSubscribeForm() {
@@ -94,6 +122,152 @@ function initSubscribeForm() {
         alert("Вы успешно подписаны на обновления нод.");
         form.reset();
     });
+}
+
+function initModelUpload() {
+    const input = document.getElementById("modelInput");
+    const zone = document.getElementById("dropZone");
+    const uploadZone = document.getElementById("uploadZone");
+    if (!input || !zone) return;
+
+    input.addEventListener("change", (e) => {
+        const file = e.target.files?.[0];
+        if (file) loadModelFromFile(file);
+    });
+
+    ["dragenter", "dragover"].forEach((evt) => {
+        zone.addEventListener(evt, (e) => {
+            e.preventDefault();
+            zone.classList.add("dragover");
+            uploadZone?.classList.add("dragover");
+        });
+    });
+
+    ["dragleave", "drop"].forEach((evt) => {
+        zone.addEventListener(evt, (e) => {
+            e.preventDefault();
+            if (evt === "dragleave" && zone.contains(e.relatedTarget)) return;
+            zone.classList.remove("dragover");
+            uploadZone?.classList.remove("dragover");
+        });
+    });
+
+    zone.addEventListener("drop", (e) => {
+        const file = e.dataTransfer?.files?.[0];
+        if (file && file.type.startsWith("image/")) loadModelFromFile(file);
+    });
+}
+
+function loadModelFromFile(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const img = new Image();
+        img.onload = async () => {
+            const maxSide = flowObject.radius * 2.4;
+            const scale = Math.min(
+                maxSide / img.width,
+                maxSide / img.height,
+                1,
+            );
+
+            loadedModel.image = img;
+            loadedModel.width = img.width * scale;
+            loadedModel.height = img.height * scale;
+            loadedModel.src = e.target.result;
+            loadedModel.file = file;
+
+            flowObject.radius =
+                Math.max(loadedModel.width, loadedModel.height) / 2;
+
+            document.getElementById("uploadZone")?.setAttribute("hidden", "");
+            updateTelemetry();
+            if (!isCalculating) drawStaticScene();
+
+            await requestSimulation(file);
+        };
+        img.onerror = () => {
+            alert("Не удалось загрузить изображение. Попробуйте другой файл.");
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+async function requestSimulation(file) {
+    if (!file || isRequesting) return;
+    isRequesting = true;
+
+    const statusBadge = document.getElementById("simStatus");
+    statusBadge.innerHTML =
+        '<span class="pulse-dot active" aria-hidden="true"></span> СТАТУС: ЗАПРОС К НЕЙРОСЕТИ';
+    statusBadge.style.color = "#00c2ff";
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("speed", simParams.speed);
+    formData.append("density", simParams.density);
+    formData.append("resolution", "128");
+
+    try {
+        const res = await fetch(`${API_URL}/api/simulate`, {
+            method: "POST",
+            body: formData,
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+
+        serverFields = {
+            pressure: data.pressure,
+            velocity_u: data.velocity_u,
+            velocity_v: data.velocity_v,
+            stats: data.stats,
+            resolution: data.resolution,
+            inference_ms: data.inference_ms,
+        };
+
+        if (data.stats) {
+            document.getElementById("telCx").textContent =
+                data.stats.cx.toFixed(3);
+            document.getElementById("telCy").textContent =
+                data.stats.cy.toFixed(3);
+            document.getElementById("telTurb").textContent = `Re ${Math.round(
+                data.stats.reynolds,
+            ).toLocaleString("ru-RU")}`;
+        }
+
+        statusBadge.innerHTML = `<span class="pulse-dot active" aria-hidden="true"></span> СТАТУС: ПОЛУЧЕНО ЗА ${data.inference_ms} МС`;
+        statusBadge.style.color = "#10b981";
+
+        if (!isCalculating) drawStaticScene();
+    } catch (err) {
+        console.error(err);
+        statusBadge.innerHTML = `<span class="pulse-dot" aria-hidden="true"></span> СТАТУС: ОШИБКА — ${err.message}`;
+        statusBadge.style.color = "#ef4444";
+    } finally {
+        isRequesting = false;
+    }
+}
+
+function clearModel() {
+    loadedModel.image = null;
+    loadedModel.src = null;
+    loadedModel.width = 0;
+    loadedModel.height = 0;
+    loadedModel.file = null;
+    serverFields = null;
+    flowObject.radius = 55;
+
+    const input = document.getElementById("modelInput");
+    if (input) input.value = "";
+    document.getElementById("uploadZone")?.removeAttribute("hidden");
+
+    updateTelemetry();
+    if (!isCalculating) drawStaticScene();
 }
 
 function scrollToSim() {
@@ -320,23 +494,6 @@ function getTouchPos(touch) {
     };
 }
 
-function setObjectType(type) {
-    simParams.type = type;
-    const map = {
-        wing: "typeWing",
-        circle: "typeCircle",
-        square: "typeSquare",
-        drop: "typeDrop",
-        triangle: "typeTriangle",
-    };
-    Object.entries(map).forEach(([key, id]) => {
-        document.getElementById(id)?.classList.toggle("active", key === type);
-    });
-
-    updateTelemetry();
-    if (!isCalculating) drawStaticScene();
-}
-
 function setViewMode(mode) {
     simParams.viewMode = mode;
     document
@@ -371,49 +528,34 @@ function updateParams() {
 }
 
 function updateTelemetry() {
+    if (serverFields?.stats) {
+        document.getElementById("telCx").textContent =
+            serverFields.stats.cx.toFixed(3);
+        document.getElementById("telCy").textContent =
+            serverFields.stats.cy.toFixed(3);
+        document.getElementById("telTurb").textContent = `Re ${Math.round(
+            serverFields.stats.reynolds,
+        ).toLocaleString("ru-RU")}`;
+        return;
+    }
+
     let cx = 0.042;
     let cy = 0.84;
     let turb = "Минимальный";
 
-    switch (simParams.type) {
-        case "circle":
-            cx = 0.47;
-            cy = 0;
-            turb = "Высокий (Срыв потока)";
-            break;
-        case "square":
-            cx = 1.05;
-            cy = 0;
-            turb = "Критический (Мгновенный срыв)";
-            break;
-        case "drop":
-            cx = 0.015;
-            cy = 0.12;
-            turb = "Отсутствует (Ламинарный поток)";
-            break;
-        case "triangle":
-            cx = 0.28;
-            cy = 0.31;
-            turb = "Умеренный (Донное разрежение)";
-            break;
-        default:
-            cx = 0.042;
-            cy = 0.84;
-            turb = "Минимальный";
+    if (loadedModel.image) {
+        const ratio = loadedModel.width / Math.max(loadedModel.height, 1);
+        cx = 0.05 + (1 / (ratio + 0.5)) * 0.08;
+        cy = ratio > 2 ? 0.65 : ratio > 1 ? 0.35 : 0.05;
+        turb =
+            ratio > 1.5
+                ? "Минимальный (Ламинарный профиль)"
+                : "Умеренный (Смешанный поток)";
     }
 
     cx += simParams.speed * 0.002;
-    if (simParams.type === "wing") cy += simParams.speed * 0.015;
-
-    if (
-        flowObject.y < canvas.height * 0.25 ||
-        flowObject.y > canvas.height * 0.75
-    ) {
-        cx *= 1.2;
-        if (simParams.type === "wing") {
-            cy *= 1.35;
-            turb = "Умеренный (Экранный эффект)";
-        }
+    if (loadedModel.image && loadedModel.width > loadedModel.height) {
+        cy += simParams.speed * 0.015;
     }
 
     document.getElementById("telCx").textContent = cx.toFixed(3);
@@ -434,69 +576,62 @@ function generateParticles(count) {
     }
 }
 
-function drawObject() {
+function drawServerFields() {
+    if (!serverFields?.pressure) return;
+
+    const field = serverFields.pressure;
+    const res = field.length;
+    const cellW = canvas.width / res;
+    const cellH = (canvas.height - 140) / res;
+
     ctx.save();
-    ctx.beginPath();
+    ctx.globalCompositeOperation = "screen";
 
-    const r = flowObject.radius;
-
-    switch (simParams.type) {
-        case "circle":
-            ctx.arc(flowObject.x, flowObject.y, r, 0, Math.PI * 2);
-            break;
-        case "square":
-            ctx.rect(flowObject.x - r, flowObject.y - r, r * 2, r * 2);
-            break;
-        case "drop":
-            ctx.moveTo(flowObject.x - r, flowObject.y);
-            ctx.bezierCurveTo(
-                flowObject.x - r * 0.4,
-                flowObject.y - r * 0.9,
-                flowObject.x + r * 0.2,
-                flowObject.y - r * 0.7,
-                flowObject.x + r * 1.3,
-                flowObject.y,
-            );
-            ctx.bezierCurveTo(
-                flowObject.x + r * 0.2,
-                flowObject.y + r * 0.7,
-                flowObject.x - r * 0.4,
-                flowObject.y + r * 0.9,
-                flowObject.x - r,
-                flowObject.y,
-            );
-            break;
-        case "triangle":
-            ctx.moveTo(flowObject.x - r, flowObject.y);
-            ctx.lineTo(flowObject.x + r, flowObject.y - r * 0.7);
-            ctx.lineTo(flowObject.x + r, flowObject.y + r * 0.7);
-            break;
-        default:
-            ctx.moveTo(flowObject.x - r, flowObject.y);
-            ctx.bezierCurveTo(
-                flowObject.x - r / 2,
-                flowObject.y - r * 0.9,
-                flowObject.x + r,
-                flowObject.y - r / 3,
-                flowObject.x + r * 1.2,
-                flowObject.y,
-            );
-            ctx.bezierCurveTo(
-                flowObject.x + r,
-                flowObject.y + r / 3,
-                flowObject.x - r / 2,
-                flowObject.y + r * 0.9,
-                flowObject.x - r,
-                flowObject.y,
-            );
+    for (let y = 0; y < res; y++) {
+        for (let x = 0; x < res; x++) {
+            const v = field[y][x];
+            const r = Math.floor(v * 255);
+            const g = Math.floor((1 - Math.abs(v - 0.5) * 2) * 120);
+            const b = Math.floor((1 - v) * 255);
+            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.35)`;
+            ctx.fillRect(x * cellW, y * cellH, cellW + 1, cellH + 1);
+        }
     }
 
+    ctx.restore();
+}
+
+function drawObject() {
+    ctx.save();
+
+    if (loadedModel.image) {
+        const w = loadedModel.width;
+        const h = loadedModel.height;
+        ctx.drawImage(
+            loadedModel.image,
+            flowObject.x - w / 2,
+            flowObject.y - h / 2,
+            w,
+            h,
+        );
+        ctx.strokeStyle = "#00C2FF";
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(flowObject.x - w / 2, flowObject.y - h / 2, w, h);
+        ctx.restore();
+        return;
+    }
+
+    ctx.beginPath();
+    const r = flowObject.radius;
+    ctx.arc(flowObject.x, flowObject.y, r, 0, Math.PI * 2);
     ctx.closePath();
-    ctx.fillStyle = "#0052FF";
+    ctx.fillStyle = "rgba(0, 82, 255, 0.08)";
     ctx.fill();
-    ctx.strokeStyle = "#00C2FF";
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = "rgba(0, 194, 255, 0.5)";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 6]);
     ctx.stroke();
+    ctx.setLineDash([]);
     ctx.restore();
 }
 
@@ -530,9 +665,43 @@ function drawEmbeddedGraph() {
     ctx.fillText("-P (Разрежение)", endX - 100, graphY - graphHeight + 12);
     ctx.fillText("+P (Сжатие)", endX - 100, graphY + graphHeight - 4);
 
+    if (serverFields?.pressure) {
+        drawRealPressureCurve(startX, graphY, graphWidth);
+    } else {
+        drawSyntheticCurve(startX, graphY, graphWidth);
+    }
+
+    ctx.restore();
+}
+
+function drawRealPressureCurve(startX, graphY, graphWidth) {
+    const field = serverFields.pressure;
+    const res = field.length;
+    const midRow = Math.floor(res / 2);
+
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = "#00C2FF";
+    ctx.beginPath();
+    for (let i = 0; i < res; i++) {
+        const x = startX + (i / (res - 1)) * graphWidth;
+        const y = graphY - (field[midRow][i] - 0.5) * 60;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    const midCol = Math.floor(res / 2);
+    ctx.strokeStyle = "#FF5C00";
+    ctx.beginPath();
+    for (let i = 0; i < res; i++) {
+        const x = startX + (i / (res - 1)) * graphWidth;
+        const y = graphY + (field[i][midCol] - 0.5) * 60;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+}
+
+function drawSyntheticCurve(startX, graphY, graphWidth) {
     const amp = simParams.speed * 2.5;
-    const objectYRatio = flowObject.y / canvas.height - 0.5;
-    const isWingLike = simParams.type === "wing" || simParams.type === "drop";
     const time = performance.now() * 0.05;
 
     ctx.lineWidth = 2.5;
@@ -542,11 +711,7 @@ function drawEmbeddedGraph() {
         const t = i / 100;
         const x = startX + t * graphWidth;
         let y = graphY;
-        if (isWingLike) {
-            y -=
-                Math.sin(t * Math.PI) * amp * 1.5 * (1 - t * 0.6) -
-                objectYRatio * 15;
-        } else if (t < 0.3) {
+        if (t < 0.3) {
             y += Math.sin((t * Math.PI) / 0.6) * amp * 0.8;
         } else {
             y -= amp * 0.5 + Math.sin(t * 30 + time) * (t - 0.3) * 4;
@@ -561,11 +726,7 @@ function drawEmbeddedGraph() {
         const t = i / 100;
         const x = startX + t * graphWidth;
         let y = graphY;
-        if (isWingLike) {
-            y +=
-                Math.sin(t * Math.PI) * amp * 0.4 * (1 - t * 0.8) +
-                objectYRatio * 15;
-        } else if (t < 0.3) {
+        if (t < 0.3) {
             y += Math.sin((t * Math.PI) / 0.6) * amp * 0.8;
         } else {
             y += amp * 0.5 - Math.sin(t * 30 + time) * (t - 0.3) * 4;
@@ -573,7 +734,6 @@ function drawEmbeddedGraph() {
         i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     }
     ctx.stroke();
-    ctx.restore();
 }
 
 function getStreamlineY(startX, startY, currentX) {
@@ -588,20 +748,14 @@ function getStreamlineY(startX, startY, currentX) {
 
         if (distance < influenceRadius) {
             const force = (influenceRadius - distance) / influenceRadius;
+            currentY += (dy > 0 ? 1.4 : -1.4) * force * (step * 0.5);
 
-            if (simParams.type === "wing" || simParams.type === "drop") {
-                currentY += (dy > 0 ? 1.6 : -0.6) * force * (step * 0.4);
-            } else if (simParams.type === "square") {
-                currentY += (dy > 0 ? 1.9 : -1.9) * force * (step * 0.5);
-            } else {
-                currentY += (dy > 0 ? 1.2 : -1.2) * force * (step * 0.5);
-                if (x > flowObject.x) {
-                    currentY +=
-                        Math.sin(x * 0.08 + performance.now() * 0.01) *
-                        3 *
-                        force *
-                        0.5;
-                }
+            if (x > flowObject.x) {
+                currentY +=
+                    Math.sin(x * 0.08 + performance.now() * 0.01) *
+                    3 *
+                    force *
+                    0.5;
             }
         }
     }
@@ -626,6 +780,8 @@ function drawStaticScene() {
         ctx.lineTo(canvas.width, y);
         ctx.stroke();
     }
+
+    if (serverFields) drawServerFields();
 
     if (simParams.viewMode === "lines") {
         ctx.lineWidth = 1.5;
@@ -659,6 +815,8 @@ function runSimulation() {
             ctx.fillStyle = "rgba(3, 7, 13, 0.16)";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+            if (serverFields) drawServerFields();
+
             for (const p of particles) {
                 const dx = flowObject.x - p.x;
                 const dy = flowObject.y - p.y;
@@ -678,26 +836,10 @@ function runSimulation() {
                             (canvas.height - 150 - flowObject.y) / 80,
                         );
 
-                    if (
-                        simParams.type === "wing" ||
-                        simParams.type === "drop"
-                    ) {
-                        p.y +=
-                            Math.tanh(
-                                (dy > 0 ? 1.6 : -0.6) * force * 3 * edgeFade,
-                            ) * 2;
-                        currentSpeed += 1.5 * force;
-                    } else if (simParams.type === "square") {
-                        p.y +=
-                            Math.tanh(
-                                (dy > 0 ? 1.9 : -1.9) * force * 4 * edgeFade,
-                            ) * 2;
-                    } else {
-                        p.y +=
-                            Math.tanh(
-                                (dy > 0 ? 1.2 : -1.2) * force * 4 * edgeFade,
-                            ) * 2.5;
-                    }
+                    p.y +=
+                        Math.tanh(
+                            (dy > 0 ? 1.4 : -1.4) * force * 4 * edgeFade,
+                        ) * 2.5;
                 }
 
                 if (p.x > flowObject.x && p.x < flowObject.x + 350) {
@@ -707,12 +849,6 @@ function runSimulation() {
                         const vortexForce = (350 - trailLength) / 350;
                         if (vortexForce > 0) {
                             const timeScale = performance.now() * 0.012;
-                            const amplitude =
-                                simParams.type === "circle" ||
-                                simParams.type === "square"
-                                    ? 14
-                                    : 6;
-
                             let edgeFadeVortex = 1;
                             if (flowObject.y < 60)
                                 edgeFadeVortex = flowObject.y / 60;
@@ -723,7 +859,7 @@ function runSimulation() {
 
                             p.y +=
                                 Math.sin(p.x * 0.05 - timeScale) *
-                                amplitude *
+                                8 *
                                 vortexForce *
                                 0.3 *
                                 edgeFadeVortex;
@@ -760,6 +896,7 @@ function runSimulation() {
         } else {
             ctx.fillStyle = "#03070D";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
+            if (serverFields) drawServerFields();
             ctx.lineWidth = 1.8;
             for (let y = 20; y < canvas.height - 140; y += 18) {
                 const gradient = ctx.createLinearGradient(
@@ -806,6 +943,5 @@ function resetSimulation() {
 window.scrollToSim = scrollToSim;
 window.runSimulation = runSimulation;
 window.resetSimulation = resetSimulation;
-window.setObjectType = setObjectType;
 window.setViewMode = setViewMode;
 window.updateParams = updateParams;

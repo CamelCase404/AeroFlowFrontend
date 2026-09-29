@@ -10,7 +10,7 @@
         <meta name="color-scheme" content="dark light" />
         <meta
             name="description"
-            content="AeroFlow — мгновенное ИИ-моделирование 2D-аэродинамики. Расчет профилей крыла NACA, сфер и клиньев за доли секунды прямо в браузере."
+            content="AeroFlow — мгновенное ИИ-моделирование 2D-аэродинамики. Загрузите 2D-модель и получите расчет обтекания за доли секунды прямо в браузере."
         />
         <meta name="format-detection" content="telephone=no" />
 
@@ -90,16 +90,17 @@
                                         >
                                     </div>
                                     <p class="node-info-text">
-                                        Инференс готов к расчету профилей крыла
-                                        NACA
+                                        Инференс готов к расчету загруженных
+                                        2D-профилей
                                     </p>
                                 </div>
 
                                 <p class="hero-caption">
                                     Интеллектуальная среда аппроксимации
-                                    уравнений Навье-Стокса. Получайте точные
-                                    эпюры давлений и векторы скоростей потоков
-                                    за доли секунды прямо в браузере.
+                                    уравнений Навье-Стокса. Загрузите SVG, PNG
+                                    или JPG контур и получайте точные эпюры
+                                    давлений и векторы скоростей потоков за доли
+                                    секунды прямо в браузере.
                                 </p>
                             </div>
                         </div>
@@ -142,18 +143,45 @@
 
                     <div class="sim-container">
                         <div class="sim-layout">
-                            <div class="canvas-wrapper">
+                            <div class="canvas-wrapper" id="dropZone">
                                 <canvas
                                     id="aeroCanvas"
                                     width="800"
                                     height="450"
                                     role="img"
-                                    aria-label="Интерактивная аэродинамическая труба. Перетаскивайте объект для изменения положения."
+                                    aria-label="Интерактивная аэродинамическая труба. Загрузите 2D-модель и перетаскивайте её."
                                 ></canvas>
+
+                                <div class="upload-zone" id="uploadZone">
+                                    <input
+                                        type="file"
+                                        id="modelInput"
+                                        accept=".svg,.png,.jpg,.jpeg,.webp"
+                                        hidden
+                                    />
+                                    <label
+                                        for="modelInput"
+                                        class="upload-label"
+                                    >
+                                        <span
+                                            class="upload-icon"
+                                            aria-hidden="true"
+                                            >⬆</span
+                                        >
+                                        <span class="upload-title"
+                                            >Загрузите 2D-модель</span
+                                        >
+                                        <span class="upload-hint"
+                                            >SVG, PNG, JPG или WebP — перетащите
+                                            файл сюда или нажмите</span
+                                        >
+                                    </label>
+                                </div>
+
                                 <p class="canvas-overlay">
                                     <span
-                                        >Управляйте пальцем или мышью для
-                                        перемещения объекта</span
+                                        >Перетаскивайте модель для изменения
+                                        положения</span
                                     >
                                 </p>
                             </div>
@@ -163,58 +191,6 @@
                                 aria-label="Параметры симуляции"
                             >
                                 <h3 class="sidebar-title">Параметры среды</h3>
-
-                                <div class="control-group">
-                                    <span class="control-label" id="geoLabel"
-                                        >Профиль геометрии:</span
-                                    >
-                                    <div
-                                        class="geometry-matrix-buttons"
-                                        role="group"
-                                        aria-labelledby="geoLabel"
-                                    >
-                                        <button
-                                            type="button"
-                                            class="toggle-btn active"
-                                            id="typeWing"
-                                            data-object-type="wing"
-                                        >
-                                            Крыло NACA
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="toggle-btn"
-                                            id="typeCircle"
-                                            data-object-type="circle"
-                                        >
-                                            Сфера
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="toggle-btn"
-                                            id="typeSquare"
-                                            data-object-type="square"
-                                        >
-                                            Квадрат
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="toggle-btn"
-                                            id="typeDrop"
-                                            data-object-type="drop"
-                                        >
-                                            Капля
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="toggle-btn"
-                                            id="typeTriangle"
-                                            data-object-type="triangle"
-                                        >
-                                            Клин
-                                        </button>
-                                    </div>
-                                </div>
 
                                 <div class="control-group">
                                     <span class="control-label" id="viewLabel"
@@ -302,6 +278,15 @@
                                         <strong id="telCy">0.840</strong>
                                     </div>
                                 </div>
+
+                                <button
+                                    type="button"
+                                    class="btn btn-secondary btn-full"
+                                    id="clearModelBtn"
+                                    data-action="clear-model"
+                                >
+                                    Очистить модель
+                                </button>
                             </aside>
                         </div>
 
@@ -390,11 +375,11 @@
                         </article>
                         <article class="solution-card">
                             <p class="card-num" aria-hidden="true">/02</p>
-                            <h3>Interactive Drag-and-Drop</h3>
+                            <h3>Загрузка своей геометрии</h3>
                             <p>
-                                Перемещайте объект в режиме реального времени.
-                                Поля давлений и обтекающие струи мгновенно
-                                пересчитываются под новое положение тела.
+                                Перетащите SVG, PNG или JPG контур прямо в
+                                воздушную трубу — система автоматически
+                                подстроит масштаб и рассчитает обтекание.
                             </p>
                         </article>
                         <article class="solution-card">
@@ -422,11 +407,10 @@
                     <div class="steps-grid">
                         <article class="step-item">
                             <p class="step-num" aria-hidden="true">01</p>
-                            <h3>Задание контура</h3>
+                            <h3>Загрузка контура</h3>
                             <p>
-                                Вы выбираете необходимую геометрию профиля крыла
-                                или сферы и позиционируете её внутри воздушной
-                                трубы.
+                                Вы перетаскиваете изображение профиля в рабочую
+                                зону или выбираете файл через проводник.
                             </p>
                         </article>
                         <article class="step-item">
