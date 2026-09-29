@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="ru">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>AeroFlow — Мгновенное ИИ-моделирование 2D-аэродинамики</title>
+        <link rel="stylesheet" href="style.css" />
+    </head>
+    <body>
+        <!-- Холст для красивой матрицы датчиков фона всей страницы -->
+        <canvas id="bgWindCanvas"></canvas>
+
+        <!-- Адаптивная навигационная панель -->
+        <header>
+            <div class="container nav-wrapper">
+                <a href="#" class="logo">Aero<span>Flow</span></a>
+                <nav class="nav-links">
+                    <a href="#simSection">Симулятор</a>
+                    <a href="#problem">Ограничения CFD</a>
+                    <a href="#solution">Технологии</a>
+                    <a href="#steps">Процесс</a>
+                </nav>
+                <button class="btn btn-primary nav-btn" onclick="scrollToSim()">
+                    начать ➜
+                </button>
+            </div>
+        </header>
+
+        <main>
+            <!-- Главный экран (Hero Section) адаптированный под смартфоны -->
+            <section class="hero">
+                <div class="container">
+                    <div class="hero-grid">
+                        <div class="hero-left">
+                            <h1>
+                                Мгновенный расчет
+                                <span class="gradient-text"
+                                    >аэродинамических полей</span
+                                >
+                                нейросетью
+                            </h1>
+
+                            <div class="hero-action-block">
+                                <div class="hero-status-widget">
+                                    <div class="status-node-line">
+                                        <div class="pulse-dot active"></div>
+                                        <span class="node-label"
+                                            >ВЫЧИСЛИТЕЛЬНОЕ ЯДРО: АКТИВНО</span
+                                        >
+                                    </div>
+                                    <div class="node-info-text">
+                                        Инференс готов к расчету профилей крыла
+                                        NACA
+                                    </div>
+                                </div>
+                                <p class="hero-caption">
+                                    Интеллектуальная среда аппроксимации
+                                    уравнений Навье-Стокса. Получайте точные
+                                    эпюры давлений и векторы скоростей потоков
+                                    за доли секунды прямо в браузере.
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Правый блок верификации (на мобильных уйдет вниз без наложения) -->
+                        <div class="hero-right">
+                            <div class="network-card">
+                                <div class="card-status-line">
+                                    <span class="status-label"
+                                        >ВЕРИФИКАЦИЯ МОДЕЛЕЙ</span
+                                    >
+                                    <span class="status-value">142 TFLOPS</span>
+                                </div>
+                                <div class="card-body-text">
+                                    «ИИ-инференс AeroFlow позволяет проводить
+                                    экспресс-анализ геометрии крыла в 10 000 раз
+                                    быстрее классических CFD-пакетов. Идеально
+                                    для итерационного проектирования.»
+                                </div>
+                                <div class="card-author">
+                                    // Лаборатория вычислительной гидродинамики
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Зона симулятора с исправленной мобильной разметкой -->
+            <section class="sim-section" id="simSection">
+                <div class="container">
+                    <div class="sim-container">
+                        <div class="sim-layout">
+                            <!-- Холст аэродинамической трубы с адаптивным поведением -->
+                            <div class="canvas-wrapper">
+                                <canvas
+                                    id="aeroCanvas"
+                                    width="800"
+                                    height="450"
+                                ></canvas>
+                                <div class="canvas-overlay">
+                                    <span
+                                        >Управляйте пальцем или мышью для
+                                        перемещения объекта</span
+                                    >
+                                </div>
+                            </div>
+
+                            <!-- Пульт параметров (на мобильных аккуратно встанет под холст) -->
+                            <div class="sim-sidebar">
+                                <div class="sidebar-title">Параметры среды</div>
+
+                                <div class="control-group">
+                                    <label>Профиль геометрии:</label>
+                                    <div class="geometry-matrix-buttons">
+                                        <button
+                                            class="toggle-btn active"
+                                            id="typeWing"
+                                            onclick="setObjectType('wing')"
+                                        >
+                                            Крыло NACA
+                                        </button>
+                                        <button
+                                            class="toggle-btn"
+                                            id="typeCircle"
+                                            onclick="setObjectType('circle')"
+                                        >
+                                            Сфера
+                                        </button>
+                                        <button
+                                            class="toggle-btn"
+                                            id="typeSquare"
+                                            onclick="setObjectType('square')"
+                                        >
+                                            Квадрат
+                                        </button>
+                                        <button
+                                            class="toggle-btn"
+                                            id="typeDrop"
+                                            onclick="setObjectType('drop')"
+                                        >
+                                            Капля
+                                        </button>
+                                        <button
+                                            class="toggle-btn"
+                                            id="typeTriangle"
+                                            onclick="setObjectType('triangle')"
+                                        >
+                                            Клин
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="control-group">
+                                    <label>Режим визуализации:</label>
+                                    <div class="toggle-buttons">
+                                        <button
+                                            class="toggle-btn active"
+                                            id="modeParticles"
+                                            onclick="setViewMode('particles')"
+                                        >
+                                            Частицы
+                                        </button>
+                                        <button
+                                            class="toggle-btn"
+                                            id="modeLines"
+                                            onclick="setViewMode('lines')"
+                                        >
+                                            Линии тока
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="control-group">
+                                    <label
+                                        >Скорость потока:
+                                        <span id="valSpeed">6</span> м/с</label
+                                    >
+                                    <input
+                                        type="range"
+                                        id="inputSpeed"
+                                        min="3"
+                                        max="15"
+                                        step="0.5"
+                                        value="6"
+                                        oninput="updateParams()"
+                                    />
+                                </div>
+
+                                <div class="control-group">
+                                    <label
+                                        >Плотность воздуха:
+                                        <span id="valDensity">160</span></label
+                                    >
+                                    <input
+                                        type="range"
+                                        id="inputDensity"
+                                        min="60"
+                                        max="300"
+                                        step="10"
+                                        value="160"
+                                        oninput="updateParams()"
+                                    />
+                                </div>
+
+                                <div class="telemetry-box">
+                                    <div class="tel-item">
+                                        Коэффициент сопротивления (Cx):
+                                        <strong id="telCx">0.042</strong>
+                                    </div>
+                                    <div class="tel-item">
+                                        Срыв ламинарного слоя:
+                                        <strong id="telTurb"
+                                            >Минимальный</strong
+                                        >
+                                    </div>
+                                    <div class="tel-item">
+                                        Подъемная сила (Cy):
+                                        <strong id="telCy">0.840</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Панель управления состоянием инференса -->
+                        <div class="sim-controls">
+                            <div class="status-badge" id="simStatus">
+                                <div class="pulse-dot"></div>
+                                СТАТУС: ТЕРМИНАЛ ГОТОВ
+                            </div>
+                            <div class="controls-buttons">
+                                <button
+                                    class="btn btn-primary"
+                                    id="startBtn"
+                                    onclick="runSimulation()"
+                                >
+                                    Запустить расчет
+                                </button>
+                                <button
+                                    class="btn btn-secondary"
+                                    id="resetBtn"
+                                    onclick="resetSimulation()"
+                                >
+                                    Сбросить
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- СБЛИЖЕННАЯ СЕКЦИЯ ОГРАНИЧЕНИЙ БЕЗ МУСОРА И КРАСНЫХ ЦВЕТОВ -->
+            <section class="problem-section" id="problem">
+                <div class="container">
+                    <div class="problem-clean-container reveal-scroll">
+                        <div class="section-meta">
+                            // ОГРАНИЧЕНИЯ КЛАССИЧЕСКИХ CFD СРЕД
+                        </div>
+                        <h2>В чем сложность гидродинамики сегодня?</h2>
+                        <p class="problem-text">
+                            Инженеры тратят драгоценные часы на рутинную
+                            подготовку расчетных сеток и тяжелые вычисления.
+                            Существующие CFD-пакеты требуют мощных серверных
+                            станций и долгой настройки граничных условий. Это
+                            кардинально замедляет процесс проектирования на
+                            ранних этапах, когда нужно быстро проверить десятки
+                            концептов геометрии.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Секция "Технологии" -->
+            <section class="solution reveal-scroll" id="solution">
+                <div class="container">
+                    <div class="section-meta">
+                        // ИИ-АРХИТЕКТУРА И МОДЕЛИРОВАНИЕ
+                    </div>
+                    <h2>Технологический стек AeroFlow</h2>
+                    <div class="solution-grid">
+                        <div class="solution-card">
+                            <div class="card-num">/01</div>
+                            <h3>Мгновенная аппроксимация</h3>
+                            <p>
+                                Нейросеть, предобученная на миллионах физических
+                                сценариев, заменяет классическое математическое
+                                решение дифференциальных уравнений Навье-Стокса.
+                            </p>
+                        </div>
+                        <div class="solution-card">
+                            <div class="card-num">/02</div>
+                            <h3>Interactive Drag-and-Drop</h3>
+                            <p>
+                                Перемещайте объект в режиме реального времени.
+                                Поля давлений и обтекающие струи мгновенно
+                                пересчитываются под новое положение тела.
+                            </p>
+                        </div>
+                        <div class="solution-card">
+                            <div class="card-num">/03</div>
+                            <h3>Встроенная эпюра полей</h3>
+                            <p>
+                                Прямо на холсте генерируется живая голограмма
+                                распределения сил, позволяя наглядно оценивать
+                                разрежение и зоны сжатия воздушного полей.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Секция "Процесс" -->
+            <section id="steps" class="reveal-scroll">
+                <div class="container">
+                    <div class="section-meta">// ОПЕРАЦИОННЫЙ ЦИКЛ</div>
+                    <h2>Как устроен рабочий процесс</h2>
+                    <div class="steps-grid">
+                        <div class="step-item">
+                            <div class="step-num">01</div>
+                            <h3>Задание контура</h3>
+                            <p>
+                                Вы выбираете необходимую геометрию профиля крыла
+                                или сферы и позиционируете её внутри воздушной
+                                трубы.
+                            </p>
+                        </div>
+                        <div class="step-item">
+                            <div class="step-num">02</div>
+                            <h3>Модуляция параметров</h3>
+                            <p>
+                                Регулируйте скорость набегающего потока и
+                                плотность газовой среды с помощью полцов
+                                терминала инференса.
+                            </p>
+                        </div>
+                        <div class="step-item">
+                            <div class="step-num">03</div>
+                            <h3>Анализ эпюры давлений</h3>
+                            <p>
+                                Считывайте показатели коэффициентов лобового
+                                сопротивления и подъемной силы на встроенном
+                                графике.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Чистый минималистичный футер -->
+        <footer>
+            <div class="container footer-grid">
+                <div class="footer-brand">
+                    <div class="logo">Aero<span>Flow</span></div>
+                    <p class="footer-tagline">
+                        Программный комплекс экспресс-анализа аэродинамических
+                        свойств объектов на базе нейросетевых моделей.
+                    </p>
+                </div>
+                <div class="footer-links-group">
+                    <div class="footer-title">Инструменты</div>
+                    <a href="#simSection">Симулятор</a>
+                    <a href="#">Документация API</a>
+                    <a href="#">Верификация полей</a>
+                </div>
+                <div class="footer-subscribe">
+                    <div class="footer-title">Мониторинг обновлений</div>
+                    <p>
+                        Подпишитесь на уведомления о выходе новых физических
+                        ИИ-нод.
+                    </p>
+                    <div class="subscribe-form">
+                        <input type="email" placeholder="инженер@бюро.рф" />
+                        <button
+                            class="btn-sub"
+                            onclick="
+                                alert('Вы успешно подписаны на обновления нод.')
+                            "
+                        >
+                            ➜
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="container footer-bottom">
+                <div>
+                    © 2026 AeroFlow Engine. Проект симуляции и расчета воздушных
+                    сред.
+                </div>
+                <div class="system-status">
+                    <span>●</span> Системы активны: 142 TFLOPS
+                </div>
+            </div>
+        </footer>
+
+        <script src="script.js"></script>
+    </body>
+</html>
