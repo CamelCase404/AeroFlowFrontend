@@ -1,43 +1,42 @@
-// Глобальные переменные терминала симулятора
-let canvas, ctx;
+"use strict";
+
+let canvas = null;
+let ctx = null;
 let animationFrameId = null;
 let isCalculating = false;
 let particles = [];
 
-// Переменные для КРАСИВОГО ИНТЕРАКТИВНОГО ФОНА ВЕТРА по всему сайту
-let bgCanvas, bgCtx;
+let bgCanvas = null;
+let bgCtx = null;
 let bgWindLines = [];
-let mouse = { x: -1000, y: -1000, targetX: -1000, targetY: -1000 };
+const mouse = { x: -1000, y: -1000, targetX: -1000, targetY: -1000 };
 
-// Контроллер физических параметров ИИ-среды
-let simParams = {
+const simParams = {
     speed: 6,
     density: 160,
     type: "wing",
     viewMode: "particles",
 };
 
-// Координаты и свойства исследуемой геометрии крыла/сферы/квадрата
-let flowObject = {
+const flowObject = {
     x: 0,
     y: 0,
     radius: 55,
     isDragging: false,
 };
 
-// Главная точка входа после полной загрузки DOM-дерева
-window.addEventListener("DOMContentLoaded", () => {
+const prefersReducedMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+).matches;
+
+document.addEventListener("DOMContentLoaded", () => {
     canvas = document.getElementById("aeroCanvas");
 
     if (canvas) {
-        ctx = canvas.getContext("2d");
-
-        // ЖЕСТКАЯ ФИКСАЦИЯ: Задаем внутреннее разрешение матрицы холста.
-        // CSS растянет его под размер экрана, сохраняя геометрию неизменной.
+        ctx = canvas.getContext("2d", { alpha: false });
         canvas.width = 800;
         canvas.height = 450;
 
-        // Помещаем объект строго по центру трубы на основе фиксированных координат
         flowObject.x = canvas.width / 2.5;
         flowObject.y = canvas.height / 2.2;
 
@@ -46,22 +45,69 @@ window.addEventListener("DOMContentLoaded", () => {
         initObjectInteraction();
     }
 
-    // ЗАПУСК КРАСИВОГО ЖИВОГО ФОНА МАТРИЦЫ ДАТЧИКОВ НА ВСЕМ САЙТЕ
     initBackgroundWind();
-
-    // Запуск трекера циклического проявления HUD-карточек при скролле
     initScrollReveal();
+    initEventDelegation();
+    initSubscribeForm();
 });
 
-// Плавная прокрутка экрана к терминалу инференса
-function scrollToSim() {
-    const target = document.getElementById("simSection");
-    if (target) target.scrollIntoView({ behavior: "smooth" });
+function initEventDelegation() {
+    document.addEventListener("click", (e) => {
+        const actionEl = e.target.closest("[data-action]");
+        if (actionEl) {
+            const action = actionEl.dataset.action;
+            if (action === "scroll-to-sim") scrollToSim();
+            if (action === "start") runSimulation();
+            if (action === "reset") resetSimulation();
+            return;
+        }
+
+        const typeBtn = e.target.closest("[data-object-type]");
+        if (typeBtn) {
+            setObjectType(typeBtn.dataset.objectType);
+            return;
+        }
+
+        const viewBtn = e.target.closest("[data-view-mode]");
+        if (viewBtn) {
+            setViewMode(viewBtn.dataset.viewMode);
+        }
+    });
+
+    const speedInput = document.getElementById("inputSpeed");
+    const densityInput = document.getElementById("inputDensity");
+    speedInput?.addEventListener("input", updateParams);
+    densityInput?.addEventListener("input", updateParams);
 }
 
-// Анимация проявления HUD-карточек: выезжают каждый раз при прокрутке
+function initSubscribeForm() {
+    const form = document.querySelector('[data-action="subscribe"]');
+    if (!form) return;
+
+    form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const input = form.querySelector('input[type="email"]');
+        if (!input || !input.checkValidity()) {
+            input?.reportValidity();
+            return;
+        }
+        alert("Вы успешно подписаны на обновления нод.");
+        form.reset();
+    });
+}
+
+function scrollToSim() {
+    document
+        .getElementById("simSection")
+        ?.scrollIntoView({ behavior: "smooth" });
+}
+
 function initScrollReveal() {
     const reveals = document.querySelectorAll(".reveal-scroll");
+    if (!reveals.length || prefersReducedMotion) {
+        reveals.forEach((el) => el.classList.add("active"));
+        return;
+    }
 
     const checkVisibility = () => {
         const triggerBottom = window.innerHeight * 0.88;
@@ -69,22 +115,19 @@ function initScrollReveal() {
 
         reveals.forEach((el) => {
             const rect = el.getBoundingClientRect();
-            if (rect.top < triggerBottom && rect.bottom > triggerTop) {
-                el.classList.add("active");
-            } else {
-                el.classList.remove("active"); // Сбрасываем, чтобы выкатывались снова
-            }
+            const visible =
+                rect.top < triggerBottom && rect.bottom > triggerTop;
+            el.classList.toggle("active", visible);
         });
     };
 
-    window.addEventListener("scroll", checkVisibility);
+    window.addEventListener("scroll", checkVisibility, { passive: true });
     checkVisibility();
 }
 
-// Инициализация фоновой матрицы датчиков с привязкой к скроллу страницы
 function initBackgroundWind() {
     bgCanvas = document.getElementById("bgWindCanvas");
-    if (!bgCanvas) return;
+    if (!bgCanvas || prefersReducedMotion) return;
     bgCtx = bgCanvas.getContext("2d");
 
     const generateSensorMatrix = () => {
@@ -92,40 +135,51 @@ function initBackgroundWind() {
         bgCanvas.height = window.innerHeight;
 
         bgWindLines = [];
-        const spacingX = 60; // Шаг сетки по горизонтали
-        const spacingY = 60; // Шаг сетки по вертикали
+        const spacingX = 60;
+        const spacingY = 60;
 
         for (let x = spacingX / 2; x < bgCanvas.width; x += spacingX) {
             for (let y = spacingY / 2; y < bgCanvas.height; y += spacingY) {
                 bgWindLines.push({
                     baseX: x,
                     baseY: y,
-                    x: x,
-                    y: y,
-                    currentAlpha: 0.09 /* Заметные матовые крестики в покое */,
-                    size: 5 /* Размах крестика 10px */,
+                    x,
+                    y,
+                    currentAlpha: 0.09,
+                    size: 5,
                 });
             }
         }
     };
 
     generateSensorMatrix();
-    window.addEventListener("resize", generateSensorMatrix);
 
-    window.addEventListener("scroll", () => {
-        if (!isCalculating && ctx) {
-            drawStaticScene();
-        }
+    let resizeTimer;
+    window.addEventListener("resize", () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(generateSensorMatrix, 150);
     });
 
-    window.addEventListener("mousemove", (e) => {
-        mouse.targetX = e.clientX;
-        mouse.targetY = e.clientY;
-    });
+    window.addEventListener(
+        "scroll",
+        () => {
+            if (!isCalculating && ctx) drawStaticScene();
+        },
+        { passive: true },
+    );
+
+    window.addEventListener(
+        "mousemove",
+        (e) => {
+            mouse.targetX = e.clientX;
+            mouse.targetY = e.clientY;
+        },
+        { passive: true },
+    );
 
     animateBackgroundWind();
 }
-// Анимационный цикл матрицы датчиков с мягким затуханием перед футером
+
 function animateBackgroundWind() {
     if (!bgCtx || !bgCanvas) return;
     bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
@@ -138,35 +192,33 @@ function animateBackgroundWind() {
         document.documentElement.scrollHeight,
     );
 
-    bgWindLines.forEach((node) => {
-        let dx = mouse.x - node.baseX;
-        let dy = mouse.y - node.baseY;
-        let distance = Math.hypot(dx, dy);
+    for (const node of bgWindLines) {
+        const dx = mouse.x - node.baseX;
+        const dy = mouse.y - node.baseY;
+        const distance = Math.hypot(dx, dy);
 
-        let maxRadius = 160;
+        const maxRadius = 160;
         let targetX = node.baseX;
         let targetY = node.baseY;
-        let baseAlpha = 0.09;
+        const baseAlpha = 0.09;
         let targetAlpha = baseAlpha;
 
         if (distance < maxRadius) {
-            let force = (maxRadius - distance) / maxRadius;
-            let pushAngle = Math.atan2(dy, dx);
-
-            let pushDistance = force * 15;
+            const force = (maxRadius - distance) / maxRadius;
+            const pushAngle = Math.atan2(dy, dx);
+            const pushDistance = force * 15;
             targetX = node.baseX - Math.cos(pushAngle) * pushDistance;
             targetY = node.baseY - Math.sin(pushAngle) * pushDistance;
-
             targetAlpha = baseAlpha + force * 0.22;
         }
 
         const absoluteY = node.baseY + window.scrollY;
-
-        // Плавное растворение сетки за 400 пикселей до самого низа сайта (перед футером)
-        let bottomFadeZone = 400;
+        const bottomFadeZone = 400;
         if (totalDocHeight - absoluteY < bottomFadeZone) {
-            let fadeFactor = (totalDocHeight - absoluteY) / bottomFadeZone;
-            fadeFactor = Math.max(0, Math.min(1, fadeFactor));
+            const fadeFactor = Math.max(
+                0,
+                Math.min(1, (totalDocHeight - absoluteY) / bottomFadeZone),
+            );
             targetAlpha *= fadeFactor;
         }
 
@@ -174,59 +226,47 @@ function animateBackgroundWind() {
         node.y += (targetY - node.y) * 0.1;
         node.currentAlpha += (targetAlpha - node.currentAlpha) * 0.1;
 
-        if (node.currentAlpha <= 0) return;
+        if (node.currentAlpha <= 0) continue;
 
         bgCtx.save();
         bgCtx.strokeStyle = `rgba(0, 194, 255, ${node.currentAlpha})`;
-        bgCtx.lineWidth = 1.0;
+        bgCtx.lineWidth = 1;
         bgCtx.beginPath();
-
         bgCtx.moveTo(node.x - node.size, node.y);
         bgCtx.lineTo(node.x + node.size, node.y);
-
         bgCtx.moveTo(node.x, node.y - node.size);
         bgCtx.lineTo(node.x, node.y + node.size);
-
         bgCtx.stroke();
         bgCtx.restore();
-    });
+    }
 
     requestAnimationFrame(animateBackgroundWind);
 }
 
-// --- ИНТЕРАКТИВ: Плавный Drag-and-Drop объекта с учетом масштаба экрана смартфона ---
 function initObjectInteraction() {
     canvas.addEventListener("mousedown", (e) => {
-        const mousePos = getMousePos(e);
-        const dist = Math.hypot(
-            mousePos.x - flowObject.x,
-            mousePos.y - flowObject.y,
-        );
+        const p = getMousePos(e);
+        const dist = Math.hypot(p.x - flowObject.x, p.y - flowObject.y);
         if (dist < flowObject.radius + 15) flowObject.isDragging = true;
     });
 
     canvas.addEventListener("mousemove", (e) => {
         if (!flowObject.isDragging) return;
-        const mousePos = getMousePos(e);
-        handleObjectMove(mousePos.x, mousePos.y);
+        const p = getMousePos(e);
+        handleObjectMove(p.x, p.y);
     });
 
     window.addEventListener("mouseup", () => {
         flowObject.isDragging = false;
     });
 
-    // ТОЧНЫЙ ТАЧ-ИНТЕРФЕЙС ДЛЯ СМАРТФОНОВ И ПЛАНШЕТОВ
     canvas.addEventListener(
         "touchstart",
         (e) => {
-            if (e.touches.length === 0) return;
-            const touchPos = getTouchPos(e.touches[0]);
-            const dist = Math.hypot(
-                touchPos.x - flowObject.x,
-                touchPos.y - flowObject.y,
-            );
+            if (!e.touches.length) return;
+            const p = getTouchPos(e.touches[0]);
+            const dist = Math.hypot(p.x - flowObject.x, p.y - flowObject.y);
             if (dist < flowObject.radius + 35) {
-                // Увеличенная зона захвата под палец
                 flowObject.isDragging = true;
                 e.preventDefault();
             }
@@ -237,9 +277,9 @@ function initObjectInteraction() {
     canvas.addEventListener(
         "touchmove",
         (e) => {
-            if (!flowObject.isDragging || e.touches.length === 0) return;
-            const touchPos = getTouchPos(e.touches[0]);
-            handleObjectMove(touchPos.x, touchPos.y);
+            if (!flowObject.isDragging || !e.touches.length) return;
+            const p = getTouchPos(e.touches[0]);
+            handleObjectMove(p.x, p.y);
             e.preventDefault();
         },
         { passive: false },
@@ -282,21 +322,16 @@ function getTouchPos(touch) {
 
 function setObjectType(type) {
     simParams.type = type;
-    document
-        .getElementById("typeWing")
-        .classList.toggle("active", type === "wing");
-    document
-        .getElementById("typeCircle")
-        .classList.toggle("active", type === "circle");
-    document
-        .getElementById("typeSquare")
-        .classList.toggle("active", type === "square");
-    document
-        .getElementById("typeDrop")
-        .classList.toggle("active", type === "drop");
-    document
-        .getElementById("typeTriangle")
-        .classList.toggle("active", type === "triangle");
+    const map = {
+        wing: "typeWing",
+        circle: "typeCircle",
+        square: "typeSquare",
+        drop: "typeDrop",
+        triangle: "typeTriangle",
+    };
+    Object.entries(map).forEach(([key, id]) => {
+        document.getElementById(id)?.classList.toggle("active", key === type);
+    });
 
     updateTelemetry();
     if (!isCalculating) drawStaticScene();
@@ -306,26 +341,28 @@ function setViewMode(mode) {
     simParams.viewMode = mode;
     document
         .getElementById("modeParticles")
-        .classList.toggle("active", mode === "particles");
+        ?.classList.toggle("active", mode === "particles");
     document
         .getElementById("modeLines")
-        .classList.toggle("active", mode === "lines");
+        ?.classList.toggle("active", mode === "lines");
 
     if (!isCalculating) drawStaticScene();
 }
 
 function updateParams() {
-    const speedInput = document.getElementById("inputSpeed").value;
-    const densityInput = document.getElementById("inputDensity").value;
+    const speedInput = document.getElementById("inputSpeed");
+    const densityInput = document.getElementById("inputDensity");
 
-    simParams.speed = parseFloat(speedInput);
-    simParams.density = parseInt(densityInput);
+    simParams.speed = Number.parseFloat(speedInput.value);
+    simParams.density = Number.parseInt(densityInput.value, 10);
 
-    document.getElementById("valSpeed").innerText = speedInput;
-    document.getElementById("valDensity").innerText = densityInput;
+    document.getElementById("valSpeed").textContent = speedInput.value;
+    document.getElementById("valDensity").textContent = densityInput.value;
+
+    speedInput.setAttribute("aria-valuenow", speedInput.value);
+    densityInput.setAttribute("aria-valuenow", densityInput.value);
 
     updateTelemetry();
-
     if (!isCalculating) drawStaticScene();
 
     if (particles.length !== simParams.density) {
@@ -341,12 +378,12 @@ function updateTelemetry() {
     switch (simParams.type) {
         case "circle":
             cx = 0.47;
-            cy = 0.0;
+            cy = 0;
             turb = "Высокий (Срыв потока)";
             break;
         case "square":
             cx = 1.05;
-            cy = 0.0;
+            cy = 0;
             turb = "Критический (Мгновенный срыв)";
             break;
         case "drop":
@@ -379,11 +416,11 @@ function updateTelemetry() {
         }
     }
 
-    document.getElementById("telCx").innerText = cx.toFixed(3);
-    document.getElementById("telCy").innerText = cy.toFixed(3);
-    document.getElementById("telTurb").innerText = turb;
+    document.getElementById("telCx").textContent = cx.toFixed(3);
+    document.getElementById("telCy").textContent = cy.toFixed(3);
+    document.getElementById("telTurb").textContent = turb;
 }
-// Генерация начального массива воздушных частиц
+
 function generateParticles(count) {
     particles = [];
     for (let i = 0; i < count; i++) {
@@ -397,7 +434,6 @@ function generateParticles(count) {
     }
 }
 
-// Отрисовка исследуемого объекта плотным синим цветом в CAD-стиле
 function drawObject() {
     ctx.save();
     ctx.beginPath();
@@ -435,7 +471,7 @@ function drawObject() {
             ctx.lineTo(flowObject.x + r, flowObject.y - r * 0.7);
             ctx.lineTo(flowObject.x + r, flowObject.y + r * 0.7);
             break;
-        default: // 'wing'
+        default:
             ctx.moveTo(flowObject.x - r, flowObject.y);
             ctx.bezierCurveTo(
                 flowObject.x - r / 2,
@@ -456,20 +492,14 @@ function drawObject() {
     }
 
     ctx.closePath();
-
-    // Плотная ярко-синяя заливка без градиентов и серости
     ctx.fillStyle = "#0052FF";
     ctx.fill();
-
-    // Четкий неоново-голубой контур для идеальной видимости границ
     ctx.strokeStyle = "#00C2FF";
     ctx.lineWidth = 2.5;
     ctx.stroke();
-
     ctx.restore();
 }
 
-// Отрисовка встроенного неонового графика (эпюры) давлений внизу холста
 function drawEmbeddedGraph() {
     ctx.save();
 
@@ -502,76 +532,62 @@ function drawEmbeddedGraph() {
 
     const amp = simParams.speed * 2.5;
     const objectYRatio = flowObject.y / canvas.height - 0.5;
+    const isWingLike = simParams.type === "wing" || simParams.type === "drop";
+    const time = performance.now() * 0.05;
 
     ctx.lineWidth = 2.5;
-
-    // Линия 1: Верхняя кромка (Неоново-голубая)
     ctx.strokeStyle = "#00C2FF";
     ctx.beginPath();
     for (let i = 0; i <= 100; i++) {
         const t = i / 100;
         const x = startX + t * graphWidth;
         let y = graphY;
-
-        if (simParams.type === "wing" || simParams.type === "drop") {
+        if (isWingLike) {
             y -=
                 Math.sin(t * Math.PI) * amp * 1.5 * (1 - t * 0.6) -
                 objectYRatio * 15;
+        } else if (t < 0.3) {
+            y += Math.sin((t * Math.PI) / 0.6) * amp * 0.8;
         } else {
-            if (t < 0.3) {
-                y += Math.sin((t * Math.PI) / 0.6) * amp * 0.8;
-            } else {
-                y -=
-                    amp * 0.5 +
-                    Math.sin(t * 30 + Date.now() * 0.05) * (t - 0.3) * 4;
-            }
+            y -= amp * 0.5 + Math.sin(t * 30 + time) * (t - 0.3) * 4;
         }
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     }
     ctx.stroke();
 
-    // Линия 2: Нижняя кромка / Срыв (Оранжевая)
     ctx.strokeStyle = "#FF5C00";
     ctx.beginPath();
     for (let i = 0; i <= 100; i++) {
         const t = i / 100;
         const x = startX + t * graphWidth;
         let y = graphY;
-
-        if (simParams.type === "wing" || simParams.type === "drop") {
+        if (isWingLike) {
             y +=
                 Math.sin(t * Math.PI) * amp * 0.4 * (1 - t * 0.8) +
                 objectYRatio * 15;
+        } else if (t < 0.3) {
+            y += Math.sin((t * Math.PI) / 0.6) * amp * 0.8;
         } else {
-            if (t < 0.3) {
-                y += Math.sin((t * Math.PI) / 0.6) * amp * 0.8;
-            } else {
-                y +=
-                    amp * 0.5 -
-                    Math.sin(t * 30 + Date.now() * 0.05) * (t - 0.3) * 4;
-            }
+            y += amp * 0.5 - Math.sin(t * 30 + time) * (t - 0.3) * 4;
         }
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     }
     ctx.stroke();
-
     ctx.restore();
 }
-// Математика обтекания нитей ламинарного воздуха (Линии тока)
+
 function getStreamlineY(startX, startY, currentX) {
     let currentY = startY;
-    let step = 4;
+    const step = 4;
 
     for (let x = startX; x < currentX; x += step) {
-        let dx = flowObject.x - x;
-        let dy = flowObject.y - currentY;
-        let distance = Math.hypot(dx, dy);
-        let influenceRadius = flowObject.radius + 40;
+        const dx = flowObject.x - x;
+        const dy = flowObject.y - currentY;
+        const distance = Math.hypot(dx, dy);
+        const influenceRadius = flowObject.radius + 40;
 
         if (distance < influenceRadius) {
-            let force = (influenceRadius - distance) / influenceRadius;
+            const force = (influenceRadius - distance) / influenceRadius;
 
             if (simParams.type === "wing" || simParams.type === "drop") {
                 currentY += (dy > 0 ? 1.6 : -0.6) * force * (step * 0.4);
@@ -581,7 +597,7 @@ function getStreamlineY(startX, startY, currentX) {
                 currentY += (dy > 0 ? 1.2 : -1.2) * force * (step * 0.5);
                 if (x > flowObject.x) {
                     currentY +=
-                        Math.sin(x * 0.08 + Date.now() * 0.01) *
+                        Math.sin(x * 0.08 + performance.now() * 0.01) *
                         3 *
                         force *
                         0.5;
@@ -592,7 +608,6 @@ function getStreamlineY(startX, startY, currentX) {
     return currentY;
 }
 
-// Сетка и сцена в режиме паузы
 function drawStaticScene() {
     ctx.fillStyle = "#03070D";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -618,9 +633,8 @@ function drawStaticScene() {
         for (let y = 20; y < canvas.height - 140; y += 18) {
             ctx.beginPath();
             for (let x = 0; x < canvas.width; x += 10) {
-                let drawY = getStreamlineY(0, y, x);
-                if (x === 0) ctx.moveTo(x, drawY);
-                else ctx.lineTo(x, drawY);
+                const drawY = getStreamlineY(0, y, x);
+                x === 0 ? ctx.moveTo(x, drawY) : ctx.lineTo(x, drawY);
             }
             ctx.stroke();
         }
@@ -630,33 +644,32 @@ function drawStaticScene() {
     drawEmbeddedGraph();
 }
 
-// Главный цикл непрерывной анимации с вихревым следом и стабилизацией краев
 function runSimulation() {
     if (isCalculating) return;
     isCalculating = true;
 
     const statusBadge = document.getElementById("simStatus");
     statusBadge.innerHTML =
-        '<div class="pulse-dot active"></div> СТАТУС: ИНФЕРЕНС ПОТОКА (LIVE)';
+        '<span class="pulse-dot active" aria-hidden="true"></span> СТАТУС: ИНФЕРЕНС ПОТОКА (LIVE)';
     statusBadge.style.color = "#10b981";
     document.getElementById("startBtn").disabled = true;
 
-    function animate() {
+    const animate = () => {
         if (simParams.viewMode === "particles") {
             ctx.fillStyle = "rgba(3, 7, 13, 0.16)";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            particles.forEach((p) => {
-                let dx = flowObject.x - p.x;
-                let dy = flowObject.y - p.y;
-                let distance = Math.hypot(dx, dy);
+            for (const p of particles) {
+                const dx = flowObject.x - p.x;
+                const dy = flowObject.y - p.y;
+                const distance = Math.hypot(dx, dy);
                 let currentSpeed = simParams.speed + p.speedOffset;
-                let influenceRadius = flowObject.radius + 40;
+                const influenceRadius = flowObject.radius + 40;
 
-                // Физика обтекания контуров
                 if (distance < influenceRadius && distance > 0) {
-                    let force = (influenceRadius - distance) / influenceRadius;
-                    let edgeFade = 1.0;
+                    const force =
+                        (influenceRadius - distance) / influenceRadius;
+                    let edgeFade = 1;
                     if (flowObject.y < 80)
                         edgeFade = Math.max(0.1, flowObject.y / 80);
                     else if (flowObject.y > canvas.height - 150)
@@ -669,38 +682,38 @@ function runSimulation() {
                         simParams.type === "wing" ||
                         simParams.type === "drop"
                     ) {
-                        let wingForceY =
-                            (dy > 0 ? 1.6 : -0.6) * force * 3 * edgeFade;
-                        p.y += Math.tanh(wingForceY) * 2;
+                        p.y +=
+                            Math.tanh(
+                                (dy > 0 ? 1.6 : -0.6) * force * 3 * edgeFade,
+                            ) * 2;
                         currentSpeed += 1.5 * force;
                     } else if (simParams.type === "square") {
-                        let sqForceY =
-                            (dy > 0 ? 1.9 : -1.9) * force * 4 * edgeFade;
-                        p.y += Math.tanh(sqForceY) * 2;
+                        p.y +=
+                            Math.tanh(
+                                (dy > 0 ? 1.9 : -1.9) * force * 4 * edgeFade,
+                            ) * 2;
                     } else {
-                        let circleForceY =
-                            (dy > 0 ? 1.2 : -1.2) * force * 4 * edgeFade;
-                        p.y += Math.tanh(circleForceY) * 2.5;
+                        p.y +=
+                            Math.tanh(
+                                (dy > 0 ? 1.2 : -1.2) * force * 4 * edgeFade,
+                            ) * 2.5;
                     }
                 }
 
-                // Вихревая дорожка за телами
                 if (p.x > flowObject.x && p.x < flowObject.x + 350) {
-                    let trailLength = p.x - flowObject.x;
-                    let verticalDist = Math.abs(p.y - flowObject.y);
-
+                    const trailLength = p.x - flowObject.x;
+                    const verticalDist = Math.abs(p.y - flowObject.y);
                     if (verticalDist < flowObject.radius + 30) {
-                        let vortexForce = (350 - trailLength) / 350;
+                        const vortexForce = (350 - trailLength) / 350;
                         if (vortexForce > 0) {
-                            let frequency = 0.05;
-                            let timeScale = Date.now() * 0.012;
-                            let amplitude =
+                            const timeScale = performance.now() * 0.012;
+                            const amplitude =
                                 simParams.type === "circle" ||
                                 simParams.type === "square"
                                     ? 14
                                     : 6;
 
-                            let edgeFadeVortex = 1.0;
+                            let edgeFadeVortex = 1;
                             if (flowObject.y < 60)
                                 edgeFadeVortex = flowObject.y / 60;
                             if (flowObject.y > canvas.height - 130)
@@ -709,7 +722,7 @@ function runSimulation() {
                             edgeFadeVortex = Math.max(0.2, edgeFadeVortex);
 
                             p.y +=
-                                Math.sin(p.x * frequency - timeScale) *
+                                Math.sin(p.x * 0.05 - timeScale) *
                                 amplitude *
                                 vortexForce *
                                 0.3 *
@@ -721,7 +734,6 @@ function runSimulation() {
 
                 p.x += currentSpeed;
 
-                // Плавные границы респавна
                 let particleAlpha = p.alpha;
                 if (p.x > canvas.width - 60)
                     particleAlpha *= (canvas.width - p.x) / 60;
@@ -744,23 +756,26 @@ function runSimulation() {
                     ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0, particleAlpha)})`;
                 }
                 ctx.fill();
-            });
+            }
         } else {
-            // Линии тока
             ctx.fillStyle = "#03070D";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.lineWidth = 1.8;
             for (let y = 20; y < canvas.height - 140; y += 18) {
-                let gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
+                const gradient = ctx.createLinearGradient(
+                    0,
+                    0,
+                    canvas.width,
+                    0,
+                );
                 gradient.addColorStop(0, "rgba(0, 194, 255, 0.4)");
                 gradient.addColorStop(0.5, "rgba(0, 194, 255, 0.6)");
                 gradient.addColorStop(1, "rgba(0, 82, 255, 0.1)");
                 ctx.strokeStyle = gradient;
                 ctx.beginPath();
                 for (let x = 0; x < canvas.width; x += 8) {
-                    let drawY = getStreamlineY(0, y, x);
-                    if (x === 0) ctx.moveTo(x, drawY);
-                    else ctx.lineTo(x, drawY);
+                    const drawY = getStreamlineY(0, y, x);
+                    x === 0 ? ctx.moveTo(x, drawY) : ctx.lineTo(x, drawY);
                 }
                 ctx.stroke();
             }
@@ -769,19 +784,28 @@ function runSimulation() {
         drawObject();
         drawEmbeddedGraph();
         animationFrameId = requestAnimationFrame(animate);
-    }
+    };
+
     animate();
 }
 
-// Остановка симуляции
 function resetSimulation() {
     isCalculating = false;
-    cancelAnimationFrame(animationFrameId);
+    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+
     const statusBadge = document.getElementById("simStatus");
     statusBadge.innerHTML =
-        '<div class="pulse-dot"></div> СТАТУС: ТЕРМИНАЛ ГОТОВ';
+        '<span class="pulse-dot" aria-hidden="true"></span> СТАТУС: ТЕРМИНАЛ ГОТОВ';
     statusBadge.style.color = "";
     document.getElementById("startBtn").disabled = false;
+
     generateParticles(simParams.density);
     drawStaticScene();
 }
+
+window.scrollToSim = scrollToSim;
+window.runSimulation = runSimulation;
+window.resetSimulation = resetSimulation;
+window.setObjectType = setObjectType;
+window.setViewMode = setViewMode;
+window.updateParams = updateParams;

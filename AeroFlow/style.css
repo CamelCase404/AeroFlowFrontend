@@ -1,64 +1,94 @@
-@import url("https://googleapis.com");
-
 :root {
-    --bg-dark: #050b14; /* Глубокий премиальный темно-синий фон */
-    --bg-card: #0c1524; /* Цвет терминала и карточек */
-    --primary-blue: #0052ff; /* Кинетический синий акцент */
-    --cyan-glow: #00c2ff; /* Голографический неоново-голубой */
-    --orange-flow: #ff5c00; /* Маркер нижней кромки потока */
-    --text-white: #ffffff; /* Чистый белый текст */
-    --text-muted: #64748b; /* Стальной приглушенный текст */
-    --border-color: rgba(0, 194, 255, 0.08); /* Высокотехнологичные границы */
-    --radius-tech: 12px; /* Геометрия углов */
+    --bg-dark: #050b14;
+    --bg-card: #0c1524;
+    --primary-blue: #0052ff;
+    --cyan-glow: #00c2ff;
+    --orange-flow: #ff5c00;
+    --text-white: #ffffff;
+    --text-muted: #64748b;
+    --border-color: rgba(0, 194, 255, 0.08);
+    --radius-tech: 12px;
     --transition-smooth: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
-* {
+*,
+*::before,
+*::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
-    font-family: "Inter", sans-serif;
 }
+
 html {
-    scroll-behavior: smooth; /* Включает плавный бесшовный скролл по якорным ссылкам */
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
 }
-html,
+
 body {
+    font-family:
+        "Inter",
+        system-ui,
+        -apple-system,
+        "Segoe UI",
+        Roboto,
+        sans-serif;
     width: 100%;
     min-height: 100%;
     background-color: var(--bg-dark);
     color: var(--text-white);
     line-height: 1.4;
     overflow-x: hidden;
-    -webkit-text-size-adjust: 100%; /* Защита от автоувеличения шрифта в iOS */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
-/* --- НАДЕЖНАЯ ПОДЛОЖКА ДЛЯ МАТРИЦЫ ДАТЧИКОВ ФОНА --- */
-#bgWindCanvas {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-
-    /* ИСПРАВЛЕНИЕ: Поднимаем холст на слой 1, чтобы он не уходил под цвет body */
-    z-index: 1 !important;
-
-    /* Жесткое требование: мышь и пальцы будут на 100% кликать сквозь сетку */
-    pointer-events: none !important;
+img,
+canvas,
+svg,
+video {
+    max-width: 100%;
     display: block;
 }
 
-/* Адаптивный контейнер: на мобильных отступы сужаются до 16px, чтобы экономить место */
+button {
+    font: inherit;
+    color: inherit;
+}
+
+:focus-visible {
+    outline: 2px solid var(--cyan-glow);
+    outline-offset: 2px;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+#bgWindCanvas {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 1;
+    pointer-events: none;
+    display: block;
+}
+
 .container {
     width: 100%;
     max-width: 1280px;
     margin: 0 auto;
     padding: 0 16px;
     position: relative;
-
-    /* Поднимаем контент и элементы управления НАД матрицей крестиков */
-    z-index: 10 !important;
+    z-index: 10;
 }
 
 @media (min-width: 768px) {
@@ -75,7 +105,7 @@ main {
 }
 
 section {
-    padding: 45px 0; /* Сближенные отступы под мобильные экраны */
+    padding: 45px 0;
     position: relative;
     z-index: 5;
     display: block;
@@ -89,15 +119,14 @@ section {
     }
 }
 
-/* --- АДАПТИВНАЯ ШАПКА МЕНЮ С ЭФФЕКТОМ МАТОВОГО СТЕКЛА --- */
-header {
+.site-header {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     z-index: 1000;
-    background: rgba(5, 11, 20, 0.5); /* Полупрозрачный фон */
-    backdrop-filter: blur(16px); /* Матовое размытие */
+    background: rgba(5, 11, 20, 0.5);
+    backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border-bottom: 1px solid var(--border-color);
 }
@@ -123,7 +152,6 @@ header {
     color: var(--primary-blue);
 }
 
-/* Мобильный горизонтальный скролл-бар для ссылок меню (не ломает строки на телефонах) */
 .nav-links {
     display: flex;
     gap: 20px;
@@ -133,7 +161,6 @@ header {
     padding: 4px 0;
 }
 
-/* Скрываем уродливую полосу прокрутки скролл-бара */
 .nav-links::-webkit-scrollbar {
     display: none;
 }
@@ -143,7 +170,7 @@ header {
     text-decoration: none;
     font-size: 0.85rem;
     font-weight: 500;
-    white-space: nowrap; /* Запрещает тексту ломаться на две строки */
+    white-space: nowrap;
     transition: var(--transition-smooth);
 }
 
@@ -151,7 +178,6 @@ header {
     color: var(--text-white);
 }
 
-/* Адаптивные кнопки */
 .btn {
     padding: 10px 18px;
     font-size: 0.82rem;
@@ -200,9 +226,13 @@ header {
     border-color: var(--border-color);
 }
 
-/* --- ГЛАВНЫЙ ЭКРАН (HERO SECTION) БЕЗ НАЛОЖЕНИЙ --- */
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .hero {
-    padding-top: 110px; /* Защитный отступ от фиксированной шапки */
+    padding-top: 110px;
     padding-bottom: 30px;
 }
 
@@ -213,7 +243,6 @@ header {
     }
 }
 
-/* Перестраиваем сетку: на телефонах вертикально (1 колонка), на ПК — 2 колонки */
 .hero-grid {
     display: grid;
     grid-template-columns: 1fr;
@@ -228,11 +257,7 @@ header {
 }
 
 .hero-left h1 {
-    font-size: clamp(
-        1.65rem,
-        5vw,
-        2.8rem
-    ); /* Шрифт динамически уменьшается на смартфонах */
+    font-size: clamp(1.65rem, 5vw, 2.8rem);
     font-weight: 800;
     line-height: 1.25;
     letter-spacing: -0.02em;
@@ -243,12 +268,13 @@ header {
     background: linear-gradient(90deg, var(--cyan-glow), #0088ff);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    background-clip: text;
     display: inline-block;
 }
 
 .hero-action-block {
     display: flex;
-    flex-direction: column; /* Элементы встают вертикально на мобильных */
+    flex-direction: column;
     gap: 20px;
     margin-top: 24px;
     padding-top: 24px;
@@ -262,13 +288,12 @@ header {
         gap: 28px;
     }
 }
-
 .hero-status-widget {
     background: rgba(0, 194, 255, 0.02);
     border: 1px solid rgba(0, 194, 255, 0.08);
     padding: 14px 18px;
     border-radius: var(--radius-tech);
-    width: 100%; /* На весь экран смартфона */
+    width: 100%;
 }
 
 @media (min-width: 600px) {
@@ -325,6 +350,7 @@ header {
 .status-label {
     color: var(--text-muted);
 }
+
 .status-value {
     color: var(--cyan-glow);
 }
@@ -353,7 +379,7 @@ header {
     color: var(--text-muted);
     font-weight: 600;
 }
-/* --- ТЕРМИНАЛ СИМУЛЯТОРА (HUD STYLE) --- */
+
 .sim-container {
     background-color: var(--bg-card);
     border: 1px solid var(--border-color);
@@ -386,7 +412,6 @@ header {
     opacity: 0.3;
 }
 
-/* На мобильных сетка падает в 1 колонку, Сайдбар уходит ПОД симулятор */
 .sim-layout {
     display: grid;
     grid-template-columns: 1fr;
@@ -402,14 +427,13 @@ header {
     }
 }
 
-/* Полный адаптив холста: вписывается в экран 1:1, сохраняя физические пропорции */
 .canvas-wrapper {
     position: relative;
     background-color: #03070d;
     border-radius: 8px;
     overflow: hidden;
     width: 100%;
-    aspect-ratio: 16 / 9; /* Жестко держит 16:9 на любом масштабе и смартфоне */
+    aspect-ratio: 16 / 9;
     border: 1px solid rgba(0, 194, 255, 0.05);
 }
 
@@ -478,7 +502,8 @@ header {
     gap: 8px;
 }
 
-.control-group label {
+.control-group label,
+.control-label {
     font-size: 0.78rem;
     font-weight: 600;
     color: var(--text-muted);
@@ -499,10 +524,8 @@ header {
     border-radius: 3px;
     cursor: pointer;
     position: relative;
-    z-index: 100 !important; /* Гарантированный фокус для пальца */
 }
 
-/* Адаптивная матрица 5 кнопок геометрии */
 .geometry-matrix-buttons {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -511,18 +534,6 @@ header {
 
 #typeTriangle {
     grid-column: span 2;
-} /* Клин по центру снизу */
-
-@media (min-width: 480px) {
-    .geometry-matrix-buttons {
-        grid-template-columns: repeat(2, 1fr);
-    }
-}
-
-@media (min-width: 1024px) {
-    .geometry-matrix-buttons {
-        grid-template-columns: repeat(2, 1fr);
-    }
 }
 
 .toggle-buttons {
@@ -572,15 +583,15 @@ header {
     justify-content: space-between;
     color: var(--text-muted);
 }
+
 .tel-item strong {
     color: var(--cyan-glow);
     font-family: monospace;
 }
 
-/* Нижняя панель управления инференсом */
 .sim-controls {
     display: flex;
-    flex-direction: column; /* Вертикально на смартфонах */
+    flex-direction: column;
     gap: 16px;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     padding-top: 20px;
@@ -619,7 +630,9 @@ header {
     height: 6px;
     background-color: #ef4444;
     border-radius: 50%;
+    display: inline-block;
 }
+
 .pulse-dot.active {
     background-color: #10b981;
     animation: pulseGlow 1.5s infinite;
@@ -645,6 +658,7 @@ header {
     gap: 10px;
     width: 100%;
 }
+
 .controls-buttons .btn {
     flex: 1;
     justify-content: center;
@@ -659,10 +673,10 @@ header {
     }
 }
 
-/* --- ОГРАНИЧЕНИЯ CFD --- */
 .problem-section {
     padding: 25px 0;
 }
+
 .problem-clean-container {
     background-color: var(--bg-card);
     border: 1px solid var(--border-color);
@@ -683,18 +697,19 @@ header {
     margin-bottom: 14px;
     letter-spacing: -0.02em;
 }
+
 .problem-text {
     font-size: 0.88rem;
     line-height: 1.6;
     color: #cbd5e1;
 }
+
 @media (min-width: 768px) {
     .problem-text {
         font-size: 1.05rem;
     }
 }
 
-/* --- СЕКЦИИ ТЕХНОЛОГИЙ И ПРОЦЕССА --- */
 .section-meta {
     font-size: 0.72rem;
     font-weight: 700;
@@ -702,12 +717,14 @@ header {
     letter-spacing: 0.12em;
     color: var(--primary-blue);
 }
+
 h2 {
     font-size: clamp(1.4rem, 4vw, 2.2rem);
     font-weight: 800;
     letter-spacing: -0.02em;
     margin-bottom: 24px;
 }
+
 @media (min-width: 768px) {
     h2 {
         margin-bottom: 40px;
@@ -720,6 +737,7 @@ h2 {
     grid-template-columns: 1fr;
     gap: 16px;
 }
+
 @media (min-width: 768px) {
     .solution-grid,
     .steps-grid {
@@ -736,10 +754,12 @@ h2 {
     border-radius: var(--radius-tech);
     transition: var(--transition-smooth);
 }
+
 .step-item {
     background-color: rgba(12, 21, 36, 0.2);
     border: 1px dashed var(--border-color);
 }
+
 .solution-card:hover {
     transform: translateY(-4px);
     border-color: var(--primary-blue);
@@ -752,6 +772,7 @@ h2 {
     margin-bottom: 14px;
     font-weight: 700;
 }
+
 .step-num {
     font-size: 1.35rem;
     font-weight: 800;
@@ -763,12 +784,14 @@ h2 {
     margin-bottom: 8px;
     font-size: 1.1rem;
 }
+
 .solution-card p,
 .step-item p {
     color: var(--text-muted);
     font-size: 0.82rem;
     line-height: 1.5;
 }
+
 @media (min-width: 768px) {
     .solution-card p,
     .step-item p {
@@ -783,13 +806,13 @@ h2 {
         opacity 0.8s ease,
         transform 0.8s ease;
 }
+
 .reveal-scroll.active {
     opacity: 1;
     transform: translateY(0);
 }
 
-/* --- МИНИМАЛИСТИЧНЫЙ ФУТЕР --- */
-footer {
+.site-footer {
     background-color: #03070d;
     border-top: 1px solid var(--border-color);
     padding: 40px 0 20px 0;
@@ -798,6 +821,7 @@ footer {
     z-index: 5;
     display: block;
 }
+
 .footer-grid {
     display: grid;
     grid-template-columns: 1fr;
@@ -805,6 +829,7 @@ footer {
     padding-bottom: 30px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
+
 @media (min-width: 1024px) {
     .footer-grid {
         grid-template-columns: 1.5fr 1fr 1.5fr;
@@ -818,6 +843,7 @@ footer {
     color: var(--text-muted);
     max-width: 300px;
 }
+
 .footer-title {
     font-size: 0.78rem;
     font-weight: 700;
@@ -826,17 +852,20 @@ footer {
     color: var(--text-white);
     margin-bottom: 12px;
 }
+
 .footer-links-group {
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
+
 .footer-links-group a {
     color: var(--text-muted);
     text-decoration: none;
     font-size: 0.82rem;
     transition: var(--transition-smooth);
 }
+
 .footer-links-group a:hover {
     color: var(--cyan-glow);
 }
@@ -846,6 +875,7 @@ footer {
     color: var(--text-muted);
     margin-bottom: 10px;
 }
+
 .subscribe-form {
     display: flex;
     background: #090f1a;
@@ -853,6 +883,7 @@ footer {
     border-radius: var(--radius-tech);
     padding: 4px;
 }
+
 .subscribe-form input {
     background: transparent;
     border: none;
@@ -862,7 +893,9 @@ footer {
     font-size: 0.82rem;
     flex: 1;
     width: 100%;
+    min-width: 0;
 }
+
 .btn-sub {
     background-color: var(--primary-blue);
     border: none;
@@ -873,6 +906,11 @@ footer {
     cursor: pointer;
     font-size: 0.82rem;
     flex-shrink: 0;
+    transition: var(--transition-smooth);
+}
+
+.btn-sub:hover {
+    background-color: #0040cc;
 }
 
 .footer-bottom {
@@ -885,6 +923,7 @@ footer {
     font-size: 0.72rem;
     color: var(--text-muted);
 }
+
 @media (min-width: 600px) {
     .footer-bottom {
         flex-direction: row;
@@ -892,10 +931,22 @@ footer {
         text-align: left;
     }
 }
+
 .system-status {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     color: #10b981;
     font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }
